@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Field Dynamics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrollbars from appearing */
+        }
+        canvas {
+            cursor: crosshair;
+            touch-action: none; /* Prevent default touch actions like scrolling */
+        }
+        .control-panel {
+            background-color: rgba(30, 41, 59, 0.8); /* slate-800 with opacity */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        /* Custom scrollbar for better aesthetics in the control panel */
+        .control-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .control-panel::-webkit-scrollbar-track {
+            background: #1e293b; /* slate-800 */
+        }
+        .control-panel::-webkit-scrollbar-thumb {
+            background: #475569; /* slate-600 */
+            border-radius: 3px;
+        }
+        .control-panel::-webkit-scrollbar-thumb:hover {
+            background: #64748b; /* slate-500 */
+        }
+        /* Style for input fields */
+        input[type="text"], select {
+            background-color: #334155; /* slate-700 */
+            border: 1px solid #475569; /* slate-600 */
+            color: #e2e8f0; /* slate-200 */
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #38bdf8; /* sky-400 */
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.4);
+        }
+        /* Custom slider styles */
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #475569; /* slate-600 */
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #38bdf8; /* sky-400 */
+            cursor: pointer;
+            margin-top: -6px; /* Center thumb on track */
+            transition: background 0.2s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            background: #7dd3fc; /* sky-300 */
+        }
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #475569;
+            border-radius: 2px;
+        }
+        input[type=range]::-moz-range-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-slate-300">
+
+    <canvas id="simulationCanvas"></canvas>
+
+    <div id="controls" class="control-panel fixed top-4 left-4 p-6 rounded-lg shadow-2xl max-h-[calc(100vh-2rem)] overflow-y-auto w-full max-w-sm">
+        <h1 class="text-2xl font-bold text-white mb-6">Vector Field Controls</h1>
+
+        <!-- Field Selection -->
+        <div class="mb-6">
+            <label for="field-type" class="block text-sm font-medium mb-2 text-slate-400">Field Type</label>
+            <select id="field-type" class="w-full">
+                <option value="vortex">Vortex</option>
+                <option value="sink">Sink</option>
+                <option value="source">Source</option>
+                <option value="uniform">Uniform Flow</option>
+                <option value="dipole">Dipole</option>
+                <option value="saddle">Saddle Point</option>
+                <option value="custom">Custom</option>
+            </select>
+        </div>
+
+        <!-- Custom Field Inputs -->
+        <div id="custom-fields" class="hidden mb-6 space-y-4">
+            <div>
+                <label for="custom-vx" class="block text-sm font-medium mb-1 text-slate-400">Velocity X (vx)</label>
+                <input type="text" id="custom-vx" placeholder="e.g., -y" class="w-full font-mono text-sm">
+                <p class="text-xs text-slate-500 mt-1">Function of 'x' and 'y'</p>
+            </div>
+            <div>
+                <label for="custom-vy" class="block text-sm font-medium mb-1 text-slate-400">Velocity Y (vy)</label>
+                <input type="text" id="custom-vy" placeholder="e.g., x" class="w-full font-mono text-sm">
+                <p class="text-xs text-slate-500 mt-1">Function of 'x' and 'y'</p>
+            </div>
+            <button id="apply-custom" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Apply Custom Field</button>
+            <div id="error-message" class="text-red-400 text-sm mt-2"></div>
+        </div>
+
+        <!-- Simulation Parameters -->
+        <div class="space-y-6">
+            <div>
+                <label for="particle-speed" class="block text-sm font-medium mb-2 text-slate-400">Particle Speed: <span id="speed-value">1.0</span></label>
+                <input type="range" id="particle-speed" min="0.1" max="5" step="0.1" value="1" class="w-full">
+            </div>
+            <div>
+                <label for="particle-count" class="block text-sm font-medium mb-2 text-slate-400">Particles per Click: <span id="count-value">50</span></label>
+                <input type="range" id="particle-count" min="1" max="200" step="1" value="50" class="w-full">
+            </div>
+            <div>
+                <label for="field-strength" class="block text-sm font-medium mb-2 text-slate-400">Field Strength: <span id="strength-value">1.0</span></label>
+                <input type="range" id="field-strength" min="0.1" max="3" step="0.1" value="1" class="w-full">
+            </div>
+            <div>
+                <label for="particle-size" class="block text-sm font-medium mb-2 text-slate-400">Particle Size: <span id="size-value">1.5</span></label>
+                <input type="range" id="particle-size" min="0.5" max="10" step="0.1" value="1.5" class="w-full">
+            </div>
+            <div>
+                <label for="particle-life" class="block text-sm font-medium mb-2 text-slate-400">Particle Lifespan: <span id="life-value">200</span></label>
+                <input type="range" id="particle-life" min="50" max="1000" step="10" value="200" class="w-full">
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="mt-8 space-y-3">
+            <button id="clear-particles" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-md transition-colors">Clear Particles</button>
+            <button id="toggle-field" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Toggle Field Grid</button>
+        </div>
+        
+        <div class="mt-6 text-xs text-slate-500 text-center">
+            <p>Click or tap on the canvas to add particles.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('simulationCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // --- Control Elements ---
+            const fieldTypeSelect = document.getElementById('field-type');
+            const customFieldsDiv = document.getElementById('custom-fields');
+            const customVxInput = document.getElementById('custom-vx');
+            const customVyInput = document.getElementById('custom-vy');
+            const applyCustomBtn = document.getElementById('apply-custom');
+            const errorMessage = document.getElementById('error-message');
+            const speedSlider = document.getElementById('particle-speed');
+            const speedValue = document.getElementById('speed-value');
+            const countSlider = document.getElementById('particle-count');
+            const countValue = document.getElementById('count-value');
+            const strengthSlider = document.getElementById('field-strength');
+            const strengthValue = document.getElementById('strength-value');
+            const sizeSlider = document.getElementById('particle-size');
+            const sizeValue = document.getElementById('size-value');
+            const lifeSlider = document.getElementById('particle-life');
+            const lifeValue = document.getElementById('life-value');
+            const clearBtn = document.getElementById('clear-particles');
+            const toggleFieldBtn = document.getElementById('toggle-field');
+
+            // --- Simulation State ---
+            let particles = [];
+            let animationFrameId;
+            let showField = false;
+            let fieldFunction = () => ({ vx: 0, vy: 0 });
+            
+            // --- Simulation Parameters ---
+            let config = {
+                particleSpeed: 1,
+                particleCount: 50,
+                fieldStrength: 1,
+                particleLife: 200, // frames
+                particleSize: 1.5,
+                gridSpacing: 25,
+                arrowLength: 10
+            };
+
+            // --- Field Definitions ---
+            // The functions take normalized coordinates (-1 to 1) and return a velocity vector
+            const fields = {
+                vortex: (x, y) => ({ vx: -y, vy: x }),
+                sink: (x, y) => ({ vx: -x, vy: -y }),
+                source: (x, y) => ({ vx: x, vy: y }),
+                uniform: (x, y) => ({ vx: 1, vy: 0 }),
+                dipole: (x, y) => {
+                    const r2 = x * x + y * y;
+                    if (r2 === 0) return { vx: 0, vy: 0 };
+                    const r4 = r2 * r2;
+                    return {
+                        vx: (2 * x * y) / r4,
+                        vy: (y * y - x * x) / r4
+                    };
+                },
+                saddle: (x, y) => ({ vx: x, vy: -y }),
+                custom: (x, y) => ({ vx: 0, vy: 0 }) // Placeholder
+            };
+
+            // --- Utility Functions ---
+            const resizeCanvas = () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            };
+
+            // Map canvas coordinates (pixels) to normalized coordinates (-1 to 1 range, centered)
+            const mapToNormalized = (px, py) => {
+                const halfW = canvas.width / 2;
+                const halfH = canvas.height / 2;
+                const scale = Math.min(halfW, halfH);
+                return {
+                    x: (px - halfW) / scale,
+                    y: (py - halfH) / scale
+                };
+            };
+            
+            // --- Particle Class ---
+            class Particle {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.px = x; // Previous x
+                    this.py = y; // Previous y
+                    this.life = config.particleLife + Math.random() * 50;
+                    this.maxLife = this.life;
+                    this.size = Math.max(0.1, config.particleSize + (Math.random() - 0.5) * config.particleSize * 0.5);
+                }
+
+                update() {
+                    this.life--;
+
+                    // Get vector from field function using normalized coordinates
+                    const normCoords = mapToNormalized(this.x, this.y);
+                    const vec = fieldFunction(normCoords.x, normCoords.y);
+                    
+                    // Normalize the resulting vector to prevent extreme speeds
+                    const mag = Math.sqrt(vec.vx * vec.vx + vec.vy * vec.vy);
+                    const normalizedVx = mag > 0 ? vec.vx / mag : 0;
+                    const normalizedVy = mag > 0 ? vec.vy / mag : 0;
+
+                    this.px = this.x;
+                    this.py = this.y;
+                    
+                    this.x += normalizedVx * config.particleSpeed * config.fieldStrength;
+                    this.y += normalizedVy * config.particleSpeed * config.fieldStrength;
+                }
+
+                draw(ctx) {
+                    const alpha = this.life / this.maxLife;
+                    ctx.beginPath();
+                    ctx.moveTo(this.px, this.py);
+                    ctx.lineTo(this.x, this.y);
+                    ctx.strokeStyle = `rgba(14, 165, 233, ${alpha * 0.8})`; // sky-500
+                    ctx.lineWidth = this.size;
+                    ctx.stroke();
+                }
+            }
+
+            // --- Core Functions ---
+            const addParticles = (x, y, count) => {
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = Math.random() * 5;
+                    particles.push(new Particle(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius));
+                }
+            };
+
+            const drawField = () => {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < canvas.width; i += config.gridSpacing) {
+                    for (let j = 0; j < canvas.height; j += config.gridSpacing) {
+                        const normCoords = mapToNormalized(i, j);
+                        const vec = fieldFunction(normCoords.x, normCoords.y);
+                        
+                        const mag = Math.sqrt(vec.vx * vec.vx + vec.vy * vec.vy);
+                        if (mag === 0) continue;
+
+                        const angle = Math.atan2(vec.vy, vec.vx);
+                        
+                        ctx.save();
+                        ctx.translate(i, j);
+                        ctx.rotate(angle);
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(config.arrowLength, 0);
+                        ctx.lineTo(config.arrowLength - 4, -3);
+                        ctx.moveTo(config.arrowLength, 0);
+                        ctx.lineTo(config.arrowLength - 4, 3);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
+            };
+
+            const updateFieldFunction = () => {
+                const type = fieldTypeSelect.value;
+                if (type === 'custom') {
+                    // This is handled by the "Apply" button
+                    return;
+                }
+                fieldFunction = fields[type];
+            };
+
+            const applyCustomField = () => {
+                const vxStr = customVxInput.value;
+                const vyStr = customVyInput.value;
+                errorMessage.textContent = '';
+                try {
+                    // Use new Function for safer evaluation than eval()
+                    const vxFunc = new Function('x', 'y', `return ${vxStr || 0}`);
+                    const vyFunc = new Function('x', 'y', `return ${vyStr || 0}`);
+                    
+                    // Test the functions to catch runtime errors
+                    vxFunc(0.1, 0.1);
+                    vyFunc(0.1, 0.1);
+
+                    fields.custom = (x, y) => ({ vx: vxFunc(x, y), vy: vyFunc(x, y) });
+                    fieldFunction = fields.custom;
+                } catch (e) {
+                    errorMessage.textContent = `Invalid function: ${e.message}`;
+                    console.error("Custom function error:", e);
+                }
+            };
+
+            const animate = () => {
+                // Fading effect
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.1)'; // slate-900 with opacity
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                if (showField) {
+                    drawField();
+                }
+
+                particles.forEach((p, i) => {
+                    p.update();
+                    p.draw(ctx);
+                    if (p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                        particles.splice(i, 1);
+                    }
+                });
+
+                animationFrameId = requestAnimationFrame(animate);
+            };
+
+            // --- Event Listeners Setup ---
+            const setupEventListeners = () => {
+                window.addEventListener('resize', () => {
+                    resizeCanvas();
+                    if (showField) { // Redraw static elements on resize
+                        ctx.fillStyle = 'rgb(15, 23, 42)'; // slate-900
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        drawField();
+                    }
+                });
+
+                canvas.addEventListener('pointerdown', (e) => {
+                    addParticles(e.clientX, e.clientY, config.particleCount);
+                });
+                
+                let isPointerDown = false;
+                canvas.addEventListener('pointerdown', (e) => { isPointerDown = true; });
+                canvas.addEventListener('pointerup', () => { isPointerDown = false; });
+                canvas.addEventListener('pointerleave', () => { isPointerDown = false; });
+                canvas.addEventListener('pointermove', (e) => {
+                    if (isPointerDown) {
+                        addParticles(e.clientX, e.clientY, Math.ceil(config.particleCount / 10)); // Add fewer particles on drag
+                    }
+                });
+
+                fieldTypeSelect.addEventListener('change', () => {
+                    customFieldsDiv.classList.toggle('hidden', fieldTypeSelect.value !== 'custom');
+                    updateFieldFunction();
+                });
+                
+                applyCustomBtn.addEventListener('click', applyCustomField);
+                
+                customVxInput.value = '-y';
+                customVyInput.value = 'x';
+
+                speedSlider.addEventListener('input', (e) => {
+                    config.particleSpeed = parseFloat(e.target.value);
+                    speedValue.textContent = config.particleSpeed.toFixed(1);
+                });
+                countSlider.addEventListener('input', (e) => {
+                    config.particleCount = parseInt(e.target.value);
+                    countValue.textContent = config.particleCount;
+                });
+                strengthSlider.addEventListener('input', (e) => {
+                    config.fieldStrength = parseFloat(e.target.value);
+                    strengthValue.textContent = config.fieldStrength.toFixed(1);
+                });
+                sizeSlider.addEventListener('input', (e) => {
+                    config.particleSize = parseFloat(e.target.value);
+                    sizeValue.textContent = config.particleSize.toFixed(1);
+                });
+                lifeSlider.addEventListener('input', (e) => {
+                    config.particleLife = parseInt(e.target.value);
+                    lifeValue.textContent = config.particleLife;
+                });
+
+                clearBtn.addEventListener('click', () => {
+                    particles = [];
+                });
+                
+                toggleFieldBtn.addEventListener('click', () => {
+                    showField = !showField;
+                    // Redraw immediately to show/hide the field
+                    ctx.fillStyle = 'rgb(15, 23, 42)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    if (showField) {
+                        drawField();
+                    }
+                });
+            };
+
+            // --- Initialization ---
+            const init = () => {
+                resizeCanvas();
+                setupEventListeners();
+                updateFieldFunction();
+                
+                // Set initial values on sliders
+                speedValue.textContent = config.particleSpeed.toFixed(1);
+                countValue.textContent = config.particleCount;
+                strengthValue.textContent = config.fieldStrength.toFixed(1);
+                sizeValue.textContent = config.particleSize.toFixed(1);
+                lifeValue.textContent = config.particleLife;
+
+                // Start the animation
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                }
+                animate();
+            };
+
+            init();
+        });
+    </script>
+</body>
+</html>
